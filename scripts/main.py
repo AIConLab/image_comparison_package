@@ -1,6 +1,3 @@
-from similarity_scorer import SimilarityScorer_realtime, SimilarityScorer_video_analysis, SimilarityScorer_image_comparison
-import argparse
-
 """
 Entry point for the image similarity scorer. This script takes in arguments to run the similarity scorer in different modes.
 Use cases:
@@ -18,6 +15,8 @@ Use cases:
         - (Optional) arg: match_result_image_output_path: Path to save the matching result image
 """
 
+import argparse
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Image similarity scorer')
     
@@ -28,7 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--match_result_image_output_path', type=str, default=None, help='Path to save the matching result image')
 
     # Realtime mode arguments
-    parser.add_argument('match_result_image_save_hz', type=float, default=0.25, help='Matching result image save frequency in Hz')
+    parser.add_argument('--match_result_image_save_hz', type=float, default=0.25, help='Matching result image save frequency in Hz')
 
     # Video analysis mode arguments
     parser.add_argument('--video_input_path', type=str, default= None, help='Path to the video file')
@@ -39,6 +38,8 @@ if __name__ == '__main__':
     parser.add_argument('--scene_img_path', type=str, default=None, help='Path to the scene image')
 
     args = parser.parse_args()
+
+    from similarity_scorer import SimilarityScorer_realtime, SimilarityScorer_video_analysis, SimilarityScorer_image_comparison
 
     try:
         if args.use_case == 'realtime':
