@@ -15,35 +15,39 @@ sys.path.insert(0, modules_dir)
 
 # Now you can import XFeat
 from modules.xfeat import XFeat
-import numpy as np
-from PIL import Image
+
+from abc import ABC, abstractmethod
+
 import torch
 import cv2
-import argparse
-import time
+import numpy as np
+from PIL import Image
+
+import json
 import queue
+import time
+
 import threading
-from abc import ABC, abstractmethod
+import signal
 
 class SimilarityScorer(ABC):
 
     xfeat = XFeat()
     def __init__(self, **kwargs):
         #Gives all implementations access to the XFeat class
-
         # Matching weights and similarity score
         self.weight_inlier = 0.4
         self.weight_feature = 0.3
         self.weight_match = 0.3
         self.similarity = 0.0
 
-    # Calculate matching scores based on the target and scene images
-    # We calculate the number of matches, number of inliers, inlier ratio, feature ratio, and match ratio
-    # uses the XFeat class to detect and compute features, match features
-    # Homography is calculated using OpenCV
-    def calculate_matching_scores(self):
-        target_tensor = torch.from_numpy(self.target_image).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-        scene_tensor = torch.from_numpy(self.scene_image).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    def calculate_matching_scores(self, target_image=None, scene_image=None):
+        # Calculate matching scores based on the target and scene images
+        # We calculate the number of matches, number of inliers, inlier ratio, feature ratio, and match ratio
+        # uses the XFeat class to detect and compute features, match features
+        # Homography is calculated using OpenCV
+        target_tensor = torch.from_numpy(target_image).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        scene_tensor = torch.from_numpy(scene_image).permute(2, 0, 1).unsqueeze(0).float() / 255.0
         
         max_features = 4096
         target_output = self.xfeat.detectAndCompute(target_tensor, top_k=max_features)[0]
@@ -65,33 +69,29 @@ class SimilarityScorer(ABC):
         return target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1
 
 
-    # Set the similarity score based on the inlier ratio, feature ratio, and match ratio
-    # If the inlier ratio is 1.0, feature ratio is 1.0, and the number of matches is the same for both images, the similarity score is 1.0
-    """
-        - Number of matches: This is the number of feature points that were successfully matched between the two images.
-        - Number of inliers: These are the matched points that are consistent with the estimated homography (transformation between the images). For identical images, this should be equal to the number of matches.
-        - Inlier ratio: This is the ratio of inliers to total matches. A value of 1.0 means all matches are consistent with the homography, which is expected for identical images.
-        - Feature ratio: This is the ratio of the number of features in the image with fewer features to the image with more features. For identical images, this should be 1.0.
-        - Number of keypoints in target image: This is the number of feature points detected in the target image.
-    """
     def set_similarity_score(self, inlier_ratio, feature_ratio, match_ratio):
-        try:
-            if (inlier_ratio == 1.0 and 
-                feature_ratio == 1.0):
-                    
-                self.similarity = 1.0
+        # Set the similarity score based on the inlier ratio, feature ratio, and match ratio
+        # If the inlier ratio is 1.0, feature ratio is 1.0, and the number of matches is the same for both images, the similarity score is 1.0
+        """
+            - Number of matches: This is the number of feature points that were successfully matched between the two images.
+            - Number of inliers: These are the matched points that are consistent with the estimated homography (transformation between the images). For identical images, this should be equal to the number of matches.
+            - Inlier ratio: This is the ratio of inliers to total matches. A value of 1.0 means all matches are consistent with the homography, which is expected for identical images.
+            - Feature ratio: This is the ratio of the number of features in the image with fewer features to the image with more features. For identical images, this should be 1.0.
+            - Number of keypoints in target image: This is the number of feature points detected in the target image.
+        """
+        if (inlier_ratio == 1.0 and 
+            feature_ratio == 1.0):
+                
+            self.similarity = 1.0
 
-            else:
-                self.similarity = min(1.0, (self.weight_inlier * inlier_ratio
-                                        + self.weight_feature * feature_ratio
-                                        + self.weight_match * match_ratio
-                                        )
-                                        * (1 + match_ratio)
-                                        )
-        except Exception as e:
-            print(f"Error setting similarity score: {e}")
-            self.similarity = 0.0
-    
+        else:
+            self.similarity = min(1.0, (self.weight_inlier * inlier_ratio
+                                    + self.weight_feature * feature_ratio
+                                    + self.weight_match * match_ratio
+                                    )
+                                    * (1 + match_ratio)
+                                    )
+
 
     def save_debug_image(self, target_image, scene_image, mkpts_0, mkpts_1, similarity_score):
         try:
@@ -130,11 +130,11 @@ class SimilarityScorer(ABC):
                 cv2.line(new_img, pt1, pt2, color, 1)
 
             # Save the image
-            cv2.imwrite(f'{self.match_result_image_output_path}/matching_results_{time.time():.0f}.jpg', new_img)
+            save_path = os.path.join("../media", self.match_result_image_output_path, f'matching_results_{time.time():.0f}.jpg')
+            cv2.imwrite(save_path, new_img)
 
         except Exception as e:
             print(f"Error saving debug image: {e}")
-
 
 class SimilarityScorer_realtime(SimilarityScorer):
     def __init__(self, debug_print=False, match_result_image_output_path=None, match_result_image_save_hz=0.25):
@@ -162,28 +162,28 @@ class SimilarityScorer_realtime(SimilarityScorer):
                 if self.match_result_image_output_path:
                     raise Exception("Output path does not exist")
 
-                self.run_debug_loop()
+                self.__run_debug_loop()
             else:
-                self.run_realtime_loop()
+                self.__run_realtime_loop()
 
         except Exception as e:
             raise e
 
-    def run_realtime_loop(self):
+    def __run_realtime_loop(self):
         while True:
-            if not self.get_images_from_memory_buffer():
+            if not self.__get_images_from_memory_buffer():
                 break
             if self.target_image is not None and self.scene_image is not None:
-                self.compare_images_realtime()
+                self.__compare_images_realtime()
                 sys.stdout.buffer.write(f"{self.similarity:.6f}\n".encode('utf-8'))
                 sys.stdout.buffer.flush()
 
-    def run_debug_loop(self):
+    def __run_debug_loop(self):
         while True:
-            if not self.get_images_from_memory_buffer():
+            if not self.__get_images_from_memory_buffer():
                 break
             if self.target_image is not None and self.scene_image is not None:
-                self.similarity, debug_info = self.compare_images_debug()
+                self.similarity, debug_info = self.__compare_images_debug()
                 sys.stdout.buffer.write(f"{self.similarity:.6f}\n".encode('utf-8'))
                 sys.stdout.buffer.flush()
                 
@@ -196,7 +196,7 @@ class SimilarityScorer_realtime(SimilarityScorer):
                         self.image_save_queue.put((self.target_image, self.scene_image, debug_info['mkpts_0'], debug_info['mkpts_1'], self.similarity))
                         self.last_save_time = current_time
 
-    def get_images_from_memory_buffer(self):
+    def __get_images_from_memory_buffer(self):
         # Read image dimensions
         line = sys.stdin.buffer.readline().strip()
         if not line:
@@ -217,15 +217,15 @@ class SimilarityScorer_realtime(SimilarityScorer):
         return True
 
 
-    def compare_images_realtime(self):
-        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores()
+    def __compare_images_realtime(self):
+        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, self.scene_image)
         self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
 
-    def compare_images_debug(self):
+    def __compare_images_debug(self):
         if self.debug_print:
             start_time = time.time()
 
-        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores()
+        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, self.scene_image)
 
         self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
 
@@ -243,7 +243,9 @@ class SimilarityScorer_realtime(SimilarityScorer):
                 "mkpts_0": mkpts_0,
                 "mkpts_1": mkpts_1
             }
-            print(execution_time)
+            
+            print(f"Execution time: {execution_time:.4f} seconds")
+
             print(debug_info)
 
         if self.match_result_image_output_path:
@@ -281,33 +283,35 @@ class SimilarityScorer_image_comparison(SimilarityScorer):
             self.scene_img_path = scene_img_path
             self.debug_print = debug_print
             self.match_result_image_output_path = match_result_image_output_path
+
             self.target_image = None
             self.scene_image = None
         
-            self.run_static_image_comparison()
+            self.__run_static_image_comparison()
 
         except Exception as e:
             raise e
 
-    def run_static_image_comparison(self):
+    def __run_static_image_comparison(self):
         self.target_image = np.array(Image.open(self.target_img_path))
         self.scene_image = np.array(Image.open(self.scene_img_path))
 
         if self.target_image is None or self.scene_image is None:
             raise Exception("Error loading images")
 
-        self.compare_images_static()
+        self.__compare_images_static()
         print(f"Similarity Score: {self.similarity:.4f}")
 
-    def compare_images_static(self):
+    def __compare_images_static(self):
         if self.debug_print:
             start_time = time.time()
 
-        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores()
+        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, self.scene_image)
         self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
 
         if self.debug_print:
             execution_time = time.time() - start_time
+
             debug_info = {
                 "num_matches": num_matches,
                 "num_inliers": num_inliers,
@@ -321,14 +325,148 @@ class SimilarityScorer_image_comparison(SimilarityScorer):
             }
 
             print(debug_info)
-            print(execution_time)
+            print(f"Execution time: {execution_time:.4f} seconds")
 
         if self.match_result_image_output_path:
             self.save_debug_image(self.target_image, self.scene_image, mkpts_0, mkpts_1, self.similarity)
 
-class SimilarityScorer_video_analysis(SimilarityScorer):
-    def __init__(self, video_input_path, video_output_path):
-        super().__init__()
 
-    def compare_images(self, target_image, scene_image):
-        pass   
+class SimilarityScorer_video_analysis(SimilarityScorer):
+    def __init__(self, video_input_path, video_output_path, target_img_path, debug_print=False):
+        super().__init__()
+        self.video_input_path = video_input_path
+        self.video_output_path = video_output_path
+        self.target_img_path = target_img_path
+        self.debug_print = debug_print
+        self.stop_event = threading.Event()
+        self.threads = []
+
+        try:
+            self.__setup()
+            self.__run_video_analysis()
+        except Exception as e:
+            print(f"Error in video analysis: {str(e)}")
+            self.cleanup()
+            raise
+
+    def __setup(self):
+        if not os.path.exists(self.video_input_path):
+            raise FileNotFoundError(f"Video input path does not exist: {self.video_input_path}")
+        if not os.path.exists(self.target_img_path):
+            raise FileNotFoundError(f"Target image path does not exist: {self.target_img_path}")
+
+        self.target_image = np.array(Image.open(self.target_img_path))
+        if self.target_image is None or self.target_image.size == 0:
+            raise ValueError("Error loading target image")
+
+        max_queue_size = 10000
+        self.frame_queue = queue.Queue(maxsize=max_queue_size)
+        self.metadata_queue = queue.Queue(maxsize=max_queue_size)
+
+        # Set up signal handling
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
+    def __run_video_analysis(self):
+        print("Starting video analysis")
+        self.threads = [
+            threading.Thread(target=self.__slice_video_into_frames),
+            threading.Thread(target=self.__process_frames),
+            threading.Thread(target=self.__create_metadata_file)
+        ]
+
+        for thread in self.threads:
+            thread.start()
+
+        for thread in self.threads:
+            thread.join()
+
+        print("Video analysis completed")
+
+    def signal_handler(self, signum, frame):
+        print("\nInterrupt received. Stopping video analysis...")
+        self.cleanup()
+        sys.exit(0)
+
+    def cleanup(self):
+        self.stop_event.set()
+        for thread in self.threads:
+            if thread.is_alive():
+                thread.join(timeout=1)
+        print("Cleanup complete")
+
+    def __slice_video_into_frames(self):
+        print("Slicing video into frames")
+        try:
+            cap = cv2.VideoCapture(self.video_input_path)
+            frame_count = 0
+            while not self.stop_event.is_set():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                self.frame_queue.put((frame_count, frame))
+                frame_count += 1
+            cap.release()
+        except Exception as e:
+            print(f"Error in slicing video: {str(e)}")
+        finally:
+            self.frame_queue.put(None)  # Signal end of frames
+
+    def __process_frames(self):
+        print("Processing frames")
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    item = self.frame_queue.get(timeout=1)
+                    if item is None:
+                        break
+                    frame_count, frame = item
+                    
+                    # Perform similarity calculation
+                    target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, frame)
+                    self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
+
+                    metadata = {
+                        "frame_number": frame_count,
+                        "similarity_score": self.similarity,
+                        "num_matches": num_matches,
+                        "num_inliers": num_inliers,
+                        "inlier_ratio": inlier_ratio,
+                        "feature_ratio": feature_ratio,
+                        "match_ratio": match_ratio,
+                        "keypoints_target": mkpts_0.tolist() if mkpts_0 is not None else [],
+                        "keypoints_frame": mkpts_1.tolist() if mkpts_1 is not None else []
+                    }
+
+                    self.metadata_queue.put(metadata)
+
+                    if self.debug_print:
+                        print(f"Processed frame {frame_count}, similarity: {self.similarity:.4f}")
+                except queue.Empty:
+                    continue
+        except Exception as e:
+            print(f"Error in processing frames: {str(e)}")
+        finally:
+            self.metadata_queue.put(None)  # Signal end of processing
+    
+
+    def __create_metadata_file(self):
+        print("Creating metadata file")
+        try:
+            metadata_path = os.path.join(os.path.dirname(self.video_output_path), "/metadata.json")
+            all_metadata = []
+            while not self.stop_event.is_set():
+                try:
+                    metadata = self.metadata_queue.get(timeout=1)
+                    if metadata is None:
+                        break
+                    all_metadata.append(metadata)
+                except queue.Empty:
+                    continue
+            with open(metadata_path, 'w') as f:
+                json.dump(all_metadata, f, indent=2)
+            print(f"Metadata saved to {metadata_path}")
+        except Exception as e:
+            print(f"Error in creating metadata file: {str(e)}")
+        def __del__(self):
+            self.cleanup()

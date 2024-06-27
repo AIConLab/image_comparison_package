@@ -49,15 +49,18 @@ if __name__ == '__main__':
             else:
                 similarity_scorer = SimilarityScorer_realtime(debug_print=args.print_debug, 
                                                               match_result_image_output_path=args.match_result_image_output_path, 
-                                                              match_result_image_save_hz=args.match_result_image_save_hz)
+                                                              match_result_image_save_hz=args.match_result_image_save_hz
+                )
         elif args.use_case == 'video_analysis':
             # Check for empty or args
-            if not args.video_input_path or not args.video_output_path:
+            if not args.video_input_path or not args.video_output_path or not args.target_img_path:
                 raise Exception("Please provide a video input path and a video output path")
             else:
                 similarity_scorer = SimilarityScorer_video_analysis(video_input_path=args.video_input_path, 
-                                                                   video_output_path=args.video_output_path)
-
+                                                                    video_output_path=args.video_output_path, 
+                                                                    target_img_path=args.target_img_path,
+                                                                    debug_print=args.print_debug
+                )
         elif args.use_case == 'image_comparison':
             # Check for empty or args
             if not args.target_img_path or not args.scene_img_path:
@@ -66,7 +69,8 @@ if __name__ == '__main__':
                 similarity_scorer = SimilarityScorer_image_comparison(target_img_path=args.target_img_path, 
                                                                      scene_img_path=args.scene_img_path,
                                                                      debug_print=args.print_debug, 
-                                                                     match_result_image_output_path=args.match_result_image_output_path)
+                                                                     match_result_image_output_path=args.match_result_image_output_path
+                )
         else:
             raise Exception("Invalid use case, please choose from realtime, video_analysis, image_comparison")
 
