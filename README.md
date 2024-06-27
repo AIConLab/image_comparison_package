@@ -23,7 +23,7 @@ pip install opencv-contrib-python tqdm
 # Run
 Below are all the arguments that can be passed to the script. 
 ```bash
-python3 scripts/main.py \
+python3 scripts/main_similarity_scorer.py \
     --use_case <use_case> \
     --print_debug \
     --match_result_image_output_path <path> \
@@ -36,7 +36,7 @@ python3 scripts/main.py \
 
 For example for the static image comparison use case using the test images in the `media` directory:
 ```bash
-python3 scripts/main.py \
+python3 scripts/main_similarity_scorer.py \
     --use_case image_comparison \
     --print_debug \
     --match_result_image_output_path media \
