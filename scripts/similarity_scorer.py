@@ -331,25 +331,52 @@ class SimilarityScorer_image_comparison(SimilarityScorer):
             self.save_debug_image(self.target_image, self.scene_image, mkpts_0, mkpts_1, self.similarity)
 
 
+
 class SimilarityScorer_video_analysis(SimilarityScorer):
-    def __init__(self, video_input_path, video_output_path, target_img_path, debug_print=False):
+    def __init__(self, video_input_path= None, 
+                 video_output_path=None, 
+                 target_img_path=None, 
+                 debug_print=False, 
+                 frame_skip=5, 
+                 use_existing_metadata_file_path=None):
         super().__init__()
+
+        # Input args
         self.video_input_path = video_input_path
         self.video_output_path = video_output_path
         self.target_img_path = target_img_path
         self.debug_print = debug_print
+        self.frame_skip = frame_skip
+        self.metadata_path = use_existing_metadata_file_path
+
+        # Threading and queue setup
         self.stop_event = threading.Event()
         self.threads = []
 
+        # 5 min * 60 sec/min * 30 frames/sec = 9000 frames
+        max_queue_size = 10000
+        self.frame_queue = queue.Queue(maxsize=max_queue_size)
+        self.metadata_queue = queue.Queue(maxsize=max_queue_size)
+
+        # Set up signal handling
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
         try:
-            self.__setup()
-            self.__run_video_analysis()
+            self.__check_args()
+
+            if not use_existing_metadata_file_path:
+                self.__run_video_analysis()
+
+            else:
+                self.__run_video
+
         except Exception as e:
             print(f"Error in video analysis: {str(e)}")
             self.cleanup()
             raise
 
-    def __setup(self):
+    def __check_args(self):
         if not os.path.exists(self.video_input_path):
             raise FileNotFoundError(f"Video input path does not exist: {self.video_input_path}")
         if not os.path.exists(self.target_img_path):
@@ -359,13 +386,6 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
         if self.target_image is None or self.target_image.size == 0:
             raise ValueError("Error loading target image")
 
-        max_queue_size = 10000
-        self.frame_queue = queue.Queue(maxsize=max_queue_size)
-        self.metadata_queue = queue.Queue(maxsize=max_queue_size)
-
-        # Set up signal handling
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
 
     def __run_video_analysis(self):
         print("Starting video analysis")
@@ -383,18 +403,6 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
 
         print("Video analysis completed")
 
-    def signal_handler(self, signum, frame):
-        print("\nInterrupt received. Stopping video analysis...")
-        self.cleanup()
-        sys.exit(0)
-
-    def cleanup(self):
-        self.stop_event.set()
-        for thread in self.threads:
-            if thread.is_alive():
-                thread.join(timeout=1)
-        print("Cleanup complete")
-
     def __slice_video_into_frames(self):
         print("Slicing video into frames")
         try:
@@ -404,7 +412,8 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
                 ret, frame = cap.read()
                 if not ret:
                     break
-                self.frame_queue.put((frame_count, frame))
+                if frame_count % self.frame_skip == 0:
+                    self.frame_queue.put((frame_count, frame))
                 frame_count += 1
             cap.release()
         except Exception as e:
@@ -414,6 +423,8 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
 
     def __process_frames(self):
         print("Processing frames")
+        if self.debug_print:
+            start_time = time.time()
         try:
             while not self.stop_event.is_set():
                 try:
@@ -427,15 +438,15 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
                     self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
 
                     metadata = {
-                        "frame_number": frame_count,
-                        "similarity_score": self.similarity,
-                        "num_matches": num_matches,
-                        "num_inliers": num_inliers,
-                        "inlier_ratio": inlier_ratio,
-                        "feature_ratio": feature_ratio,
-                        "match_ratio": match_ratio,
-                        "keypoints_target": mkpts_0.tolist() if mkpts_0 is not None else [],
-                        "keypoints_frame": mkpts_1.tolist() if mkpts_1 is not None else []
+                        "frame_number": int(frame_count),
+                        "similarity_score": float(self.similarity),
+                        "num_matches": int(num_matches),
+                        "num_inliers": int(num_inliers),
+                        "inlier_ratio": float(inlier_ratio),
+                        "feature_ratio": float(feature_ratio),
+                        "match_ratio": float(match_ratio),
+                        "keypoints_target": [[float(x) for x in point] for point in mkpts_0.tolist()] if mkpts_0 is not None else [],
+                        "keypoints_frame": [[float(x) for x in point] for point in mkpts_1.tolist()] if mkpts_1 is not None else []
                     }
 
                     self.metadata_queue.put(metadata)
@@ -447,26 +458,61 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
         except Exception as e:
             print(f"Error in processing frames: {str(e)}")
         finally:
+            if self.debug_print:
+                execution_time = time.time() - start_time
+                print(f"Frame processing time: {execution_time:.4f} seconds")
+
             self.metadata_queue.put(None)  # Signal end of processing
-    
+        
+        print("Frame processing completed")
 
     def __create_metadata_file(self):
         print("Creating metadata file")
+        all_metadata = []
         try:
-            metadata_path = os.path.join(os.path.dirname(self.video_output_path), "/metadata.json")
-            all_metadata = []
-            while not self.stop_event.is_set():
+            while True:
                 try:
                     metadata = self.metadata_queue.get(timeout=1)
                     if metadata is None:
                         break
                     all_metadata.append(metadata)
                 except queue.Empty:
+                    if self.stop_event.is_set():
+                        break
                     continue
+
+            metadata_path = os.path.join(self.video_output_path, "metadata.json")
+            
+            # Ensure the output directory exists
+            os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+            
+            # Create the final list with video_input_path as the first item
+            final_metadata = [
+                {"video_input_path": self.video_input_path}
+            ] + all_metadata
+            
             with open(metadata_path, 'w') as f:
-                json.dump(all_metadata, f, indent=2)
+                json.dump(final_metadata, f, indent=2)
             print(f"Metadata saved to {metadata_path}")
+            print(f"Number of frames processed: {len(all_metadata)}")
+
         except Exception as e:
             print(f"Error in creating metadata file: {str(e)}")
-        def __del__(self):
-            self.cleanup()
+            print(f"Metadata path attempted: {metadata_path}")
+            print(f"Number of metadata entries: {len(all_metadata)}")
+        
+
+    def signal_handler(self, signum, frame):
+        print("\nInterrupt received. Stopping video analysis...")
+        self.cleanup()
+        sys.exit(0)
+
+    def cleanup(self):
+        self.stop_event.set()
+        for thread in self.threads:
+            if thread.is_alive():
+                thread.join(timeout=1)
+        print("Cleanup complete")
+
+    def __del__(self):
+        self.cleanup()
