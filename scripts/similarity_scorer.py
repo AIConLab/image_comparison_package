@@ -621,19 +621,26 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
         except Exception as e:
             raise
 
-
     def __create_heatmap(self, shape, keypoints):
+        # Create a heatmap from the keypoints
         heatmap = np.zeros(shape, dtype=np.float32)
         for kp in keypoints:
+            # Ensure the keypoint is within the image bounds
             x, y = int(kp[0]), int(kp[1])
             if 0 <= x < shape[1] and 0 <= y < shape[0]:
                 heatmap[y, x] += 1
+        # Apply Gaussian filter and normalize. A gaussian filter is applied to smooth the heatmap.
         heatmap = gaussian_filter(heatmap, sigma=10)
+
+        # Normalize the heatmap
         heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
+
         return heatmap
 
     def __apply_heatmap(self, image, heatmap):
+        # Apply the heatmap to the image
         heatmap_color = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
         return cv2.addWeighted(image, 0.7, heatmap_color, 0.3, 0)
     
     def signal_handler(self, signum, frame):
