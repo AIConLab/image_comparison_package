@@ -21,14 +21,21 @@ from abc import ABC, abstractmethod
 import torch
 import cv2
 import numpy as np
+
+
+from scipy.ndimage import gaussian_filter
 from PIL import Image
 
 import json
 import queue
 import time
 
+import traceback
 import threading
 import signal
+
+
+from tqdm import tqdm
 
 class SimilarityScorer(ABC):
 
@@ -333,21 +340,29 @@ class SimilarityScorer_image_comparison(SimilarityScorer):
 
 
 class SimilarityScorer_video_analysis(SimilarityScorer):
-    def __init__(self, video_input_path= None, 
-                 video_output_path=None, 
+    def __init__(self, 
+                 mode=None,
+                 video_input_path= None, 
+                 video_output_path=None,
+                 metadata_output_path=None, 
                  target_img_path=None, 
                  debug_print=False, 
                  frame_skip=5, 
-                 use_existing_metadata_file_path=None):
+                 metadata_input_path=None
+                 ):
         super().__init__()
 
         # Input args
         self.video_input_path = video_input_path
-        self.video_output_path = video_output_path
         self.target_img_path = target_img_path
-        self.debug_print = debug_print
+        self.target_image = np.array(Image.open(self.target_img_path))
+        self.metadata_input_path = metadata_input_path
+
+        self.video_output_path = video_output_path
+        self.metadata_output_path = metadata_output_path
+
         self.frame_skip = frame_skip
-        self.metadata_path = use_existing_metadata_file_path
+        self.debug_print = debug_print
 
         # Threading and queue setup
         self.stop_event = threading.Event()
@@ -363,28 +378,46 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
         signal.signal(signal.SIGTERM, self.signal_handler)
 
         try:
-            self.__check_args()
+            # Verify inputs
+            if not os.path.exists(self.video_input_path):
+                raise FileNotFoundError(f"Video input path does not exist: {self.video_input_path}")
 
-            if not use_existing_metadata_file_path:
+            if not os.path.exists(self.target_img_path):
+                raise FileNotFoundError(f"Target image path does not exist: {self.target_img_path}")
+
+            if self.target_image is None or self.target_image.size == 0:
+                raise ValueError("Error loading target image")
+
+            if mode == "video_analysis":
+                
+                # Verify args for video analysis mode
+                if not os.path.exists(self.video_output_path):
+                    raise FileNotFoundError(f"Video output path does not exist: {self.video_output_path}")
+                if not os.path.exists(self.metadata_output_path):
+                    raise FileNotFoundError(f"Metadata output path does not exist: {self.metadata_output_path}")
+
                 self.__run_video_analysis()
 
+            elif mode == "render_analyzed_video":
+                # Verify args for render analyzed video mode
+                if not os.path.exists(self.metadata_input_path):
+                    raise FileNotFoundError(f"Metadata input path does not exist: {self.metadata_input_path}")
+                
+                if not os.path.exists(self.video_output_path):
+                    raise FileNotFoundError(f"Video output path does not exist: {self.video_output_path}")
+
+                self.__render_analyzed_comparison()
+
             else:
-                self.__run_video
+                raise ValueError("Invalid mode selected")
 
         except Exception as e:
-            print(f"Error in video analysis: {str(e)}")
+            error_message = f"Error in SimilarityScorer_video_analysis: {str(e)}\n"
+            error_message += "Traceback:\n"
+            error_message += traceback.format_exc()
+            print(error_message)
             self.cleanup()
             raise
-
-    def __check_args(self):
-        if not os.path.exists(self.video_input_path):
-            raise FileNotFoundError(f"Video input path does not exist: {self.video_input_path}")
-        if not os.path.exists(self.target_img_path):
-            raise FileNotFoundError(f"Target image path does not exist: {self.target_img_path}")
-
-        self.target_image = np.array(Image.open(self.target_img_path))
-        if self.target_image is None or self.target_image.size == 0:
-            raise ValueError("Error loading target image")
 
 
     def __run_video_analysis(self):
@@ -481,14 +514,16 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
                         break
                     continue
 
-            metadata_path = os.path.join(self.video_output_path, "metadata.json")
+            metadata_path = os.path.join(self.metadata_output_path, "metadata.json")
             
             # Ensure the output directory exists
             os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
             
             # Create the final list with video_input_path as the first item
             final_metadata = [
-                {"video_input_path": self.video_input_path}
+                {"video_input_path": self.video_input_path},
+                {"target_image_path": self.target_img_path},
+                {"frame_skip_rate": self.frame_skip}
             ] + all_metadata
             
             with open(metadata_path, 'w') as f:
@@ -501,7 +536,106 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
             print(f"Metadata path attempted: {metadata_path}")
             print(f"Number of metadata entries: {len(all_metadata)}")
         
+    
+    def __read_metadata_file(self):
+        # Read the metadata file and return the metadata dictionary
+        try:
+            with open(self.metadata_input_path, 'r') as f:
+                metadata = json.load(f)
+            return metadata
+        except Exception as e:
+            print(f"Error reading metadata file: {str(e)}")
+            return None
 
+
+    def __render_analyzed_comparison(self):
+        try:
+            metadata = self.__read_metadata_file()
+            if metadata is None:
+                raise ValueError("Error reading metadata file")
+
+            # Extract information from the first item in metadata
+            video_input_path = metadata[0]["video_input_path"]
+            target_img_path = metadata[0]["target_image_path"]
+            frame_skip = metadata[0]["frame_skip_rate"]
+
+            # Check if the paths exist
+            if not os.path.exists(video_input_path):
+                raise FileNotFoundError(f"Video input path does not exist: {video_input_path}")
+            if not os.path.exists(target_img_path):
+                raise FileNotFoundError(f"Target image path does not exist: {target_img_path}")
+            
+            target_image = cv2.imread(target_img_path)
+            if target_image is None:
+                raise ValueError(f"Could not read target image from {target_img_path}")
+
+            cap = cv2.VideoCapture(video_input_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            output_path = os.path.join(self.video_output_path, "analyzed_video.mp4")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+            frame_queue = queue.Queue()
+
+            for frame_data in tqdm(metadata[3:], desc="Rendering frames"):
+                frame_number = frame_data["frame_number"]
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # Create heatmaps for both target and frame
+                target_heatmap = self.__create_heatmap(target_image.shape[:2], frame_data["keypoints_target"])
+                frame_heatmap = self.__create_heatmap(frame.shape[:2], frame_data["keypoints_frame"])
+                
+                # Apply heatmaps
+                frame_with_heatmap = self.__apply_heatmap(frame, frame_heatmap)
+                target_with_heatmap = self.__apply_heatmap(target_image, target_heatmap)
+
+                # Resize target image for overlay
+                target_small = cv2.resize(target_with_heatmap, (width // 4, height // 4))
+
+                # Create final frame
+                final_frame = frame_with_heatmap.copy()
+                final_frame[10:10+target_small.shape[0], 10:10+target_small.shape[1]] = target_small
+
+                # Add similarity score
+                similarity_score = frame_data["similarity_score"]
+                cv2.putText(final_frame, f"Similarity: {similarity_score:.2f}", (width - 200, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+                frame_queue.put(final_frame)
+
+            cap.release()
+
+            # Write frames to video
+            while not frame_queue.empty():
+                out.write(frame_queue.get())
+
+            out.release()
+            print(f"Analyzed video saved to {output_path}")
+
+        except Exception as e:
+            raise
+
+
+    def __create_heatmap(self, shape, keypoints):
+        heatmap = np.zeros(shape, dtype=np.float32)
+        for kp in keypoints:
+            x, y = int(kp[0]), int(kp[1])
+            if 0 <= x < shape[1] and 0 <= y < shape[0]:
+                heatmap[y, x] += 1
+        heatmap = gaussian_filter(heatmap, sigma=10)
+        heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
+        return heatmap
+
+    def __apply_heatmap(self, image, heatmap):
+        heatmap_color = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
+        return cv2.addWeighted(image, 0.7, heatmap_color, 0.3, 0)
+    
     def signal_handler(self, signum, frame):
         print("\nInterrupt received. Stopping video analysis...")
         self.cleanup()
