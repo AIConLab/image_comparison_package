@@ -45,11 +45,11 @@ if __name__ == '__main__':
                 raise Exception("Please provide a valid video analysis mode (video_analysis, render_analyzed_video)")
             # Check for empty or args
 
-            if not args.video_input_path or not args.video_output_path or not args.target_img_path:
-                raise Exception("Please provide a video input path and a video output path")
-
             # Video anlysis mode must have video input and output paths, target image path, metadata output path, 
             if args.video_analysis_mode == 'video_analysis':
+                if not args.video_input_path or not args.target_img_path:
+                    raise Exception("Please provide a video input path and a target image path")
+
                 if not args.metadata_output_path:
                     raise Exception("Please provide a metadata output path")
                 
@@ -67,6 +67,9 @@ if __name__ == '__main__':
                 if not args.metadata_input_path:
                     raise Exception("Please provide a metadata input path")
 
+                if not args.video_output_path:
+                    raise Exception("Please provide a video output path")
+
                 else:
                     similarity_scorer = SimilarityScorer_video_analysis(mode='render_analyzed_video',
                                                                         video_input_path=args.video_input_path, 
@@ -79,7 +82,6 @@ if __name__ == '__main__':
 
         elif args.use_case == 'image_comparison':
             # Bad args check
-
             if not args.target_img_path or not args.scene_img_path:
                 raise Exception("Please provide a target image path and a scene image path")
 

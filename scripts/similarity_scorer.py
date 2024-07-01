@@ -337,8 +337,6 @@ class SimilarityScorer_image_comparison(SimilarityScorer):
         if self.match_result_image_output_path:
             self.save_debug_image(self.target_image, self.scene_image, mkpts_0, mkpts_1, self.similarity)
 
-
-
 class SimilarityScorer_video_analysis(SimilarityScorer):
     def __init__(self, 
                  mode=None,
@@ -378,17 +376,16 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
         signal.signal(signal.SIGTERM, self.signal_handler)
 
         try:
-            # Verify inputs
-            if not os.path.exists(self.video_input_path):
-                raise FileNotFoundError(f"Video input path does not exist: {self.video_input_path}")
-
-            if not os.path.exists(self.target_img_path):
-                raise FileNotFoundError(f"Target image path does not exist: {self.target_img_path}")
-
-            if self.target_image is None or self.target_image.size == 0:
-                raise ValueError("Error loading target image")
-
             if mode == "video_analysis":
+                # Verify inputs
+                if not os.path.exists(self.video_input_path):
+                    raise FileNotFoundError(f"Video input path does not exist: {self.video_input_path}")
+
+                if not os.path.exists(self.target_img_path):
+                    raise FileNotFoundError(f"Target image path does not exist: {self.target_img_path}")
+
+                if self.target_image is None or self.target_image.size == 0:
+                    raise ValueError("Error loading target image")
                 
                 # Verify args for video analysis mode
                 if not os.path.exists(self.video_output_path):
@@ -399,6 +396,7 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
                 self.__run_video_analysis()
 
             elif mode == "render_analyzed_video":
+
                 # Verify args for render analyzed video mode
                 if not os.path.exists(self.metadata_input_path):
                     raise FileNotFoundError(f"Metadata input path does not exist: {self.metadata_input_path}")

@@ -44,29 +44,6 @@ python3 scripts/main_similarity_scorer.py \
     --scene_img_path media/target_image.jpg
 ```
 
-
-    parser = argparse.ArgumentParser(description='Image similarity scorer')
-    
-    parser.add_argument("--use_case", type=str, default=None, help="Use case to run (realtime, video_analysis, image_comparison)")
-
-    # Shared arguments
-    parser.add_argument('--print_debug', action='store_true', help='Print debug information to console')
-    parser.add_argument('--match_result_image_output_path', type=str, default=None, help='Path to save the matching result image')
-    parser.add_argument('--target_img_path', type=str, default=None, help='Path to the target image')
-
-    # Realtime mode arguments
-    parser.add_argument('--match_result_image_save_hz', type=float, default=0.25, help='Matching result image save frequency in Hz')
-
-    # Video analysis mode arguments
-    parser.add_argument('--video_analysis_mode', type=str, default=None, help='Mode to run the video analysis in (video_analysis, render_analyzed_video)')
-    parser.add_argument('--video_input_path', type=str, default= None, help='Path to the video file')
-    parser.add_argument('--video_output_path', type=str, default=None, help='Path to save the output video file.')
-    parser.add_argument('--frame_skip', type=int, default=5, help='Number of frames to skip in the video')
-    parser.add_argument('--metadata_output_path', type=str, default=None, help='Path to save the metadata output')
-    parser.add_argument('--metadata_input_path', type=str, default=None, help='Path to the metadata input')
-
-
-
 Example for creating a metadata file for a video file:
 ```bash
 python3 scripts/main_similarity_scorer.py \
