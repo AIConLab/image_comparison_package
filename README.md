@@ -23,7 +23,7 @@ pip install opencv-contrib-python tqdm
 # Run
 Below are all the arguments that can be passed to the script. 
 ```bash
-python3 scripts/main_similarity_scorer.py \
+python3 main_similarity_scorer.py \
     --use_case <use_case> \
     --print_debug \
     --match_result_image_output_path <path> \
@@ -36,7 +36,7 @@ python3 scripts/main_similarity_scorer.py \
 
 For example for the static image comparison use case using the test images in the `media` directory:
 ```bash
-python3 scripts/main_similarity_scorer.py \
+python3 main_similarity_scorer.py \
     --use_case image_comparison \
     --print_debug \
     --match_result_image_output_path media \
@@ -46,7 +46,7 @@ python3 scripts/main_similarity_scorer.py \
 
 Example for creating a metadata file for a video file:
 ```bash
-python3 scripts/main_similarity_scorer.py \
+python3 main_similarity_scorer.py \
     --use_case video_analysis \
     --video_analysis_mode video_analysis \
     --match_result_image_output_path /home/jc/Videos/video_data \
@@ -60,7 +60,7 @@ python3 scripts/main_similarity_scorer.py \
 
 Example for rendering the analyzed video:
 ```bash
-python3 scripts/main_similarity_scorer.py \
+python3 main_similarity_scorer.py \
     --use_case video_analysis \
     --video_analysis_mode render_analyzed_video \
     --target_img_path /home/jc/Videos/video_data/target.png \

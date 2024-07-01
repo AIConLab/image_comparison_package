@@ -2,7 +2,7 @@ import sys
 import os
 
 # Get the path to the package directory
-package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+package_dir = os.path.abspath(os.path.join(os.path.dirname(__file__)))
 sys.path.insert(0, package_dir)
 
 # Add the path to the accelerated_features directory
@@ -137,7 +137,7 @@ class SimilarityScorer(ABC):
                 cv2.line(new_img, pt1, pt2, color, 1)
 
             # Save the image
-            save_path = os.path.join("../media", self.match_result_image_output_path, f'matching_results_{time.time():.0f}.jpg')
+            save_path = os.path.join("media", self.match_result_image_output_path, f'matching_results_{time.time():.0f}.jpg')
             cv2.imwrite(save_path, new_img)
 
         except Exception as e:
