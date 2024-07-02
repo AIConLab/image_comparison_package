@@ -1,4 +1,5 @@
 import argparse
+import traceback
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Image similarity scorer')
@@ -10,8 +11,6 @@ if __name__ == '__main__':
     parser.add_argument('--match_result_image_output_path', type=str, default=None, help='Path to save the matching result image')
     parser.add_argument('--target_img_path', type=str, default=None, help='Path to the target image')
 
-    # Realtime mode arguments
-    parser.add_argument('--match_result_image_save_hz', type=float, default=0.25, help='Matching result image save frequency in Hz')
 
     # Video analysis mode arguments
     parser.add_argument('--video_analysis_mode', type=str, default=None, help='Mode to run the video analysis in (video_analysis, render_analyzed_video)')
@@ -22,25 +21,22 @@ if __name__ == '__main__':
     parser.add_argument('--metadata_input_path', type=str, default=None, help='Path to the metadata input')
 
 
-
     # Image comparison mode arguments
     parser.add_argument('--scene_img_path', type=str, default=None, help='Path to the scene image')
 
     args = parser.parse_args()
 
-    from similarity_scorer import SimilarityScorer_realtime, SimilarityScorer_video_analysis, SimilarityScorer_image_comparison
 
     try:
         if args.use_case == 'realtime':
-            # Check for hz if output path is provided
-            if args.match_result_image_output_path and not args.match_result_image_save_hz:
-                raise Exception("Please provide a matching result image save frequency in Hz")
-            else:
-                similarity_scorer = SimilarityScorer_realtime(debug_print=args.print_debug, 
-                                                              match_result_image_output_path=args.match_result_image_output_path, 
-                                                              match_result_image_save_hz=args.match_result_image_save_hz
-                )
+            from similarity_scorer_realtime import SimilarityScorer_realtime
+
+            similarity_scorer = SimilarityScorer_realtime()
+
         elif args.use_case == 'video_analysis':
+
+            from similarity_scorer_video_analysis import SimilarityScorer_video_analysis
+
             if args.video_analysis_mode not in ['video_analysis', 'render_analyzed_video']:
                 raise Exception("Please provide a valid video analysis mode (video_analysis, render_analyzed_video)")
             # Check for empty or args
@@ -81,14 +77,17 @@ if __name__ == '__main__':
                                                                         )
 
         elif args.use_case == 'image_comparison':
+
+            from similarity_scorer_static_image_comparison import SimilarityScorer_static_image_comparison
+
+
             # Bad args check
             if not args.target_img_path or not args.scene_img_path:
                 raise Exception("Please provide a target image path and a scene image path")
 
             
-
             else:
-                similarity_scorer = SimilarityScorer_image_comparison(target_img_path=args.target_img_path, 
+                similarity_scorer = SimilarityScorer_static_image_comparison(target_img_path=args.target_img_path, 
                                                                      scene_img_path=args.scene_img_path,
                                                                      debug_print=args.print_debug, 
                                                                      match_result_image_output_path=args.match_result_image_output_path
@@ -97,5 +96,6 @@ if __name__ == '__main__':
             raise Exception("Invalid use case, please choose from realtime, video_analysis, image_comparison")
 
     except Exception as e:
-        print(f"Error: {e}")
+        # Traceback to get the error message
+        traceback.print_exc()
         exit(1)
