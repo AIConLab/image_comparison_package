@@ -143,12 +143,12 @@ class SimilarityScorer(ABC):
         except Exception as e:
             print(f"Error saving debug image: {e}")
 
+
 # Class for matching live video stream
 class SimilarityScorer_realtime(SimilarityScorer):
     def __init__(self, debug_print=False, match_result_image_output_path=None, match_result_image_save_hz=0.25):
         try:
             super().__init__()
-
             
             self.target_image = None
             self.scene_image = None 
@@ -160,9 +160,10 @@ class SimilarityScorer_realtime(SimilarityScorer):
 
 
             # Check for debugging args
-            if self.debug_print or self.match_result_image_output_path:
+            if debug_print or match_result_image_output_path:
 
-                self.debug_print = debug_print
+                if debug_print:
+                    self.debug_print = debug_print
 
                 # Start thread for saving debug images
                 if self.match_result_image_output_path:
@@ -184,10 +185,15 @@ class SimilarityScorer_realtime(SimilarityScorer):
 
     def __run_realtime_loop(self):
         while True:
+
             if not self.__get_images_from_memory_buffer():
                 break
+
+            # Compare images if both are available
             if self.target_image is not None and self.scene_image is not None:
                 self.__compare_images_realtime()
+                
+                # Output similarity score to stdout
                 sys.stdout.buffer.write(f"{self.similarity:.6f}\n".encode('utf-8'))
                 sys.stdout.buffer.flush()
 
@@ -289,6 +295,8 @@ class SimilarityScorer_realtime(SimilarityScorer):
             target_image, scene_image, mkpts_0, mkpts_1, similarity = self.image_save_queue.get()
             self.save_debug_image(target_image, scene_image, mkpts_0, mkpts_1, similarity)
 
+
+
 class SimilarityScorer_image_comparison(SimilarityScorer):
     def __init__(self, target_img_path, scene_img_path, debug_print=False, match_result_image_output_path=None):
         try:
@@ -343,6 +351,8 @@ class SimilarityScorer_image_comparison(SimilarityScorer):
 
         if self.match_result_image_output_path:
             self.save_debug_image(self.target_image, self.scene_image, mkpts_0, mkpts_1, self.similarity)
+
+
 
 class SimilarityScorer_video_analysis(SimilarityScorer):
     def __init__(self, 
