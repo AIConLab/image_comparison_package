@@ -143,14 +143,12 @@ class SimilarityScorer(ABC):
         except Exception as e:
             print(f"Error saving debug image: {e}")
 
+# Class for matching live video stream
 class SimilarityScorer_realtime(SimilarityScorer):
     def __init__(self, debug_print=False, match_result_image_output_path=None, match_result_image_save_hz=0.25):
         try:
             super().__init__()
 
-            self.debug_print = debug_print
-            self.match_result_image_output_path = match_result_image_output_path
-            self.match_result_image_save_hz = match_result_image_save_hz
             
             self.target_image = None
             self.scene_image = None 
@@ -160,17 +158,25 @@ class SimilarityScorer_realtime(SimilarityScorer):
             self.stop_worker = False
             self.last_save_time = 0
 
-            if self.match_result_image_output_path:
-                self.save_thread = threading.Thread(target=self.save_matching_results_worker, daemon=True)
-                self.save_thread.start()
 
+            # Check for debugging args
             if self.debug_print or self.match_result_image_output_path:
-                # Check if the output path exists
+
+                self.debug_print = debug_print
+
+                # Start thread for saving debug images
                 if self.match_result_image_output_path:
-                    raise Exception("Output path does not exist")
+                    self.save_thread = threading.Thread(target=self.save_matching_results_worker, daemon=True)
+                    self.save_thread.start()
+
+                    self.match_result_image_output_path = match_result_image_output_path
+                    self.match_result_image_save_hz = match_result_image_save_hz
 
                 self.__run_debug_loop()
+
+            # Normal loop
             else:
+
                 self.__run_realtime_loop()
 
         except Exception as e:
@@ -225,6 +231,7 @@ class SimilarityScorer_realtime(SimilarityScorer):
 
 
     def __compare_images_realtime(self):
+        # Method to get the similarity score of two images. Uses inherited methods.
         target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, self.scene_image)
         self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
 
