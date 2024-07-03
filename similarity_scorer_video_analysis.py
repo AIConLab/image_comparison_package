@@ -1,4 +1,4 @@
-from .similarity_scorer import SimilarityScorer
+from similarity_scorer import SimilarityScorer
 
 import os
 import time
@@ -135,48 +135,46 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
 
     def __process_frames(self):
         print("Processing frames")
-        if self.debug_print:
-            start_time = time.time()
         try:
-            while not self.stop_event.is_set():
-                try:
-                    item = self.frame_queue.get(timeout=1)
-                    if item is None:
-                        break
-                    frame_count, frame = item
-                    
-                    # Perform similarity calculation
-                    target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, frame)
-                    self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
+            total_frames = self.frame_queue.qsize()
+            with tqdm(total=total_frames, desc="Processing frames", unit="frame") as pbar:
+                while not self.stop_event.is_set():
+                    try:
+                        item = self.frame_queue.get(timeout=1)
+                        if item is None:
+                            break
+                        frame_count, frame = item
+                        
+                        # Perform similarity calculation
+                        target_output, scene_output, num_matches, num_inliers, inlier_ratio, feature_ratio, match_ratio, mkpts_0, mkpts_1 = self.calculate_matching_scores(self.target_image, frame)
+                        self.set_similarity_score(inlier_ratio, feature_ratio, match_ratio)
 
-                    metadata = {
-                        "frame_number": int(frame_count),
-                        "similarity_score": float(self.similarity),
-                        "num_matches": int(num_matches),
-                        "num_inliers": int(num_inliers),
-                        "inlier_ratio": float(inlier_ratio),
-                        "feature_ratio": float(feature_ratio),
-                        "match_ratio": float(match_ratio),
-                        "keypoints_target": [[float(x) for x in point] for point in mkpts_0.tolist()] if mkpts_0 is not None else [],
-                        "keypoints_frame": [[float(x) for x in point] for point in mkpts_1.tolist()] if mkpts_1 is not None else []
-                    }
+                        metadata = {
+                            "frame_number": int(frame_count),
+                            "similarity_score": float(self.similarity),
+                            "num_matches": int(num_matches),
+                            "num_inliers": int(num_inliers),
+                            "inlier_ratio": float(inlier_ratio),
+                            "feature_ratio": float(feature_ratio),
+                            "match_ratio": float(match_ratio),
+                            "keypoints_target": [[float(x) for x in point] for point in mkpts_0.tolist()] if mkpts_0 is not None else [],
+                            "keypoints_frame": [[float(x) for x in point] for point in mkpts_1.tolist()] if mkpts_1 is not None else []
+                        }
 
-                    self.metadata_queue.put(metadata)
+                        self.metadata_queue.put(metadata)
 
-                    if self.debug_print:
-                        print(f"Processed frame {frame_count}, similarity: {self.similarity:.4f}")
-                except queue.Empty:
-                    continue
+                        pbar.update(1)
+                        pbar.set_postfix({"similarity": f"{self.similarity:.4f}"})
+
+                    except queue.Empty:
+                        continue
         except Exception as e:
             print(f"Error in processing frames: {str(e)}")
         finally:
-            if self.debug_print:
-                execution_time = time.time() - start_time
-                print(f"Frame processing time: {execution_time:.4f} seconds")
-
             self.metadata_queue.put(None)  # Signal end of processing
         
         print("Frame processing completed")
+
 
     def __create_metadata_file(self):
         print("Creating metadata file")
@@ -235,8 +233,8 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
 
             # Extract information from the first item in metadata
             video_input_path = metadata[0]["video_input_path"]
-            target_img_path = metadata[0]["target_image_path"]
-            frame_skip = metadata[0]["frame_skip_rate"]
+            target_img_path = metadata[1]["target_image_path"]
+            frame_skip = metadata[2]["frame_skip_rate"]
 
             # Check if the paths exist
             if not os.path.exists(video_input_path):
