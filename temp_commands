@@ -1,0 +1,17 @@
+python3 main_similarity_scorer.py \
+    --use_case video_analysis \
+    --video_analysis_mode video_analysis \
+    --video_input_path /home/jc/Documents/research/image_comp_cluttered_struct/IMG_1239.MOV \
+    --video_output_path /home/jc/Documents/research/image_comp_cluttered_struct \
+    --target_img_path /home/jc/Documents/research/image_comp_cluttered_struct/target_img.png \
+    --metadata_output_path /home/jc/Documents/research/image_comp_cluttered_struct \
+    --frame_skip 0\
+    --print_debug
+
+
+python3 main_similarity_scorer.py \
+    --use_case video_analysis \
+    --video_analysis_mode render_analyzed_video \
+    --video_output_path /home/jc/Documents/research/image_comp_cluttered_struct \
+    --metadata_input_path /home/jc/Documents/research/image_comp_cluttered_struct/metadata.json \
+    --print_debug

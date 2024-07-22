@@ -21,12 +21,12 @@ from tqdm import tqdm
 class SimilarityScorer_video_analysis(SimilarityScorer):
     def __init__(self, 
                  mode=None,
-                 video_input_path= None, 
+                 video_input_path=None, 
                  video_output_path=None,
                  metadata_output_path=None, 
                  target_img_path=None, 
                  debug_print=False, 
-                 frame_skip=5, 
+                 frame_skip=1, 
                  metadata_input_path=None
                  ):
         super().__init__()
@@ -34,7 +34,6 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
         # Input args
         self.video_input_path = video_input_path
         self.target_img_path = target_img_path
-        self.target_image = np.array(Image.open(self.target_img_path))
         self.metadata_input_path = metadata_input_path
 
         self.video_output_path = video_output_path
@@ -42,6 +41,11 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
 
         self.frame_skip = frame_skip
         self.debug_print = debug_print
+
+        # Only load target image if in video_analysis mode
+        self.target_image = None
+        if mode == "video_analysis" and self.target_img_path:
+            self.target_image = np.array(Image.open(self.target_img_path))
 
         # Threading and queue setup
         self.stop_event = threading.Event()
@@ -77,7 +81,6 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
                 self.__run_video_analysis()
 
             elif mode == "render_analyzed_video":
-
                 # Verify args for render analyzed video mode
                 if not os.path.exists(self.metadata_input_path):
                     raise FileNotFoundError(f"Metadata input path does not exist: {self.metadata_input_path}")
@@ -124,7 +127,7 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
                 ret, frame = cap.read()
                 if not ret:
                     break
-                if frame_count % self.frame_skip == 0:
+                if self.frame_skip == 0 or frame_count % self.frame_skip == 0:
                     self.frame_queue.put((frame_count, frame))
                 frame_count += 1
             cap.release()
@@ -244,7 +247,8 @@ class SimilarityScorer_video_analysis(SimilarityScorer):
             
             target_image = cv2.imread(target_img_path)
             if target_image is None:
-                raise ValueError(f"Could not read target image from {target_img_path}")
+                print(f"Warning: Could not read target image from {target_img_path}. Using a blank image instead.")
+                target_image = np.zeros((height, width, 3), dtype=np.uint8)
 
             cap = cv2.VideoCapture(video_input_path)
             fps = cap.get(cv2.CAP_PROP_FPS)

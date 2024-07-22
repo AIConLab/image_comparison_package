@@ -49,11 +49,11 @@ Example for creating a metadata file for a video file:
 python3 main_similarity_scorer.py \
     --use_case video_analysis \
     --video_analysis_mode video_analysis \
-    --match_result_image_output_path /home/jc/Videos/video_data_new \
     --video_input_path /home/jc/Videos/video_data_new/untitled.mp4 \
     --video_output_path /home/jc/Videos/video_data_new \
     --target_img_path /home/jc/Videos/video_data_new/target.png \
     --metadata_output_path /home/jc/Videos/video_data_new \
+    --frame_skip 5 \
     --print_debug
 
 ```
@@ -63,9 +63,7 @@ Example for rendering the analyzed video:
 python3 main_similarity_scorer.py \
     --use_case video_analysis \
     --video_analysis_mode render_analyzed_video \
-    --target_img_path /home/jc/Videos/video_data_new/target.png \
-    --video_input_path /home/jc/Videos/video_data_new/untitled.mp4 \
-    --metadata_input_path /home/jc/Videos/video_data_new/metadata.json \
     --video_output_path /home/jc/Videos/video_data_new \
+    --metadata_input_path /home/jc/Videos/video_data_new/metadata.json \
     --print_debug
 ```
